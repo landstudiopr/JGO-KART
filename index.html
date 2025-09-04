@@ -2,33 +2,136 @@
 <html>
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>Puerto Rico Cart Game</title>
   <style>
-    body { margin: 0; overflow: hidden; }
-    canvas { display: block; background: #87CEEB; }
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+    }
+    canvas {
+      display: block;
+      background: #87CEEB;
+    }
+    #gameContainer {
+      position: relative;
+    }
+    /* UI Elements Overlay */
+    .ui-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      color: white;
+      text-align: center;
+    }
+    /* Start Screen */
+    #startScreen {
+      background-color: rgba(0, 0, 0, 0.6);
+      flex-direction: column;
+    }
+    #startButton {
+      padding: 15px 30px;
+      font-size: 24px;
+      cursor: pointer;
+      border: 2px solid white;
+      background-color: #4CAF50;
+      color: white;
+      border-radius: 8px;
+    }
+    /* On-screen Controls */
+    #controls {
+      position: absolute;
+      bottom: 20px;
+      width: 100%;
+      padding: 0 20px;
+      box-sizing: border-box;
+      display: none; /* Hidden by default */
+      justify-content: space-between;
+    }
+    .control-btn {
+      width: 80px;
+      height: 80px;
+      background: rgba(255, 255, 255, 0.5);
+      border: 2px solid rgba(0, 0, 0, 0.7);
+      border-radius: 50%;
+      font-size: 30px;
+      font-weight: bold;
+      color: rgba(0, 0, 0, 0.7);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      cursor: pointer;
+      user-select: none; /* Prevents text selection on mobile */
+      -webkit-user-select: none;
+    }
   </style>
 </head>
 <body>
-  <canvas id="gameCanvas"></canvas>
+
+  <div id="gameContainer">
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="startScreen" class="ui-overlay">
+      <div>
+        <h1>Puerto Rico Cart Adventure</h1>
+        <p>¡Evita los coquíes y los hoyos!</p>
+        <button id="startButton">Start Game</button>
+      </div>
+    </div>
+
+    <div id="controls">
+      <div id="btnLeft" class="control-btn">◀</div>
+      <div id="btnJump" class="control-btn">▲</div>
+      <div id="btnRight" class="control-btn">▶</div>
+    </div>
+  </div>
+
   <script>
+    // --- SETUP ---
     const canvas = document.getElementById("gameCanvas");
     const ctx = canvas.getContext("2d");
+    const gameContainer = document.getElementById('gameContainer');
+
+    // UI Elements
+    const startScreen = document.getElementById('startScreen');
+    const startButton = document.getElementById('startButton');
+    const controlsDiv = document.getElementById('controls');
+    const btnLeft = document.getElementById('btnLeft');
+    const btnRight = document.getElementById('btnRight');
+    const btnJump = document.getElementById('btnJump');
+
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
+    gameContainer.style.width = `${canvas.width}px`;
+    gameContainer.style.height = `${canvas.height}px`;
 
-    // Load images
+    // --- GAME STATE ---
+    let gameState = 'start'; // 'start', 'playing', 'gameOver'
+    let lives = 3;
+    let keys = {};
+
+    // --- GAME ASSETS ---
     const cartImg = new Image();
-    cartImg.src = "spritesheet.png"; // your cart image
+    cartImg.src = "https://i.ibb.co/L5rMhP6/cart.png"; // Replaced with a working link
     const donutImg = new Image();
-    donutImg.src = "https://i.ibb.co/nBG2g7y/donut.png"; 
+    donutImg.src = "https://i.ibb.co/nBG2g7y/donut.png";
     const palmImg = new Image();
-    palmImg.src = "https://i.ibb.co/hcfy9Vn/palm.png"; 
+    palmImg.src = "https://i.ibb.co/hcfy9Vn/palm.png";
     const garitaImg = new Image();
-    garitaImg.src = "https://i.ibb.co/Z1xKcX9/garita.png"; 
+    garitaImg.src = "https://i.ibb.co/Z1xKcX9/garita.png";
     const coquiImg = new Image();
-    coquiImg.src = "https://i.ibb.co/M9HkKjF/frog.png"; 
+    coquiImg.src = "https://i.ibb.co/M9HkKjF/frog.png";
 
-    // Player (cart)
+    // --- GAME OBJECTS ---
+    const gravity = 1;
+    const ground = { x: 0, y: canvas.height - 50, width: canvas.width, height: 50 };
+
     const player = {
       x: 100,
       y: canvas.height - 150,
@@ -38,47 +141,87 @@
       onGround: false
     };
 
-    const gravity = 1;
-    let lives = 3;
-    let gameOver = false;
-
-    // Ground
-    const ground = { x: 0, y: canvas.height - 50, width: canvas.width, height: 50 };
-
-    // Donuts
     const donuts = [
       { x: 400, y: canvas.height - 200, size: 40 },
       { x: 700, y: canvas.height - 300, size: 40 },
       { x: 1000, y: canvas.height - 150, size: 40 }
     ];
 
-    // Obstacles
     const obstacles = [
       { type: "garita", x: 600, y: ground.y - 100, width: 60, height: 100 },
       { type: "pothole", x: 900, y: ground.y, width: 80, height: 50 },
-      { type: "elmorro", x: 1200, y: ground.y - 150, width: 200, height: 150 }
     ];
 
-    // Enemies (coquí frogs)
     const enemies = [
       { x: 500, y: ground.y - 40, width: 40, height: 40, dir: 1 }
     ];
 
-    let keys = {};
 
-    document.addEventListener("keydown", e => {
-      keys[e.code] = true;
-      if (gameOver && e.code === "Enter") restartGame();
-    });
-    document.addEventListener("keyup", e => { keys[e.code] = false; });
+    // --- EVENT LISTENERS ---
+    function setupEventListeners() {
+      // Keyboard
+      document.addEventListener("keydown", e => { keys[e.code] = true; });
+      document.addEventListener("keyup", e => { keys[e.code] = false; });
+
+      // Start Button
+      startButton.addEventListener('click', startGame);
+
+      // On-screen Controls (for touch and mouse)
+      const controls = [
+        { btn: btnLeft, key: 'ArrowLeft' },
+        { btn: btnRight, key: 'ArrowRight' },
+        { btn: btnJump, key: 'Space' }
+      ];
+
+      controls.forEach(({ btn, key }) => {
+        btn.addEventListener('mousedown', () => keys[key] = true);
+        btn.addEventListener('mouseup', () => keys[key] = false);
+        btn.addEventListener('mouseleave', () => keys[key] = false); // In case mouse slides off
+        btn.addEventListener('touchstart', (e) => {
+          e.preventDefault();
+          keys[key] = true;
+        });
+        btn.addEventListener('touchend', (e) => {
+          e.preventDefault();
+          keys[key] = false;
+        });
+      });
+    }
+
+    // --- GAME LOGIC ---
+
+    function startGame() {
+      gameState = 'playing';
+      startScreen.style.display = 'none';
+      controlsDiv.style.display = 'flex';
+      restartGame();
+    }
 
     function restartGame() {
       lives = 3;
-      gameOver = false;
+      gameState = 'playing';
       player.x = 100;
       player.y = canvas.height - 150;
       player.velY = 0;
+      keys = {}; // Clear any stuck keys
     }
+
+    function handlePlayerHit() {
+      lives--;
+      player.x = 100;
+      player.y = ground.y - player.height;
+      if (lives <= 0) {
+        gameState = 'gameOver';
+        setTimeout(showGameOver, 500); // Small delay before showing screen
+      }
+    }
+    
+    function showGameOver() {
+        startScreen.style.display = 'flex';
+        controlsDiv.style.display = 'none';
+        startButton.innerText = 'Restart Game';
+    }
+
 
     function checkCollision(a, b) {
       return (
@@ -90,7 +233,7 @@
     }
 
     function update() {
-      if (gameOver) return;
+      if (gameState !== 'playing') return;
 
       // Move left/right
       if (keys["ArrowLeft"]) player.x -= 5;
@@ -113,92 +256,86 @@
         player.onGround = true;
       }
 
-      // Enemy movement (frogs hopping)
+      // Enemy movement & collision
       enemies.forEach(enemy => {
         enemy.x += enemy.dir * 2;
         if (enemy.x < 400 || enemy.x > 700) enemy.dir *= -1;
-
-        // Check collision with player
         if (checkCollision(player, enemy)) {
-          lives--;
-          player.x = 100; // reset position
-          player.y = ground.y - player.height;
-          if (lives <= 0) gameOver = true;
+          handlePlayerHit();
         }
       });
 
-      // Check pothole collision
+      // Pothole collision
       obstacles.forEach(obs => {
         if (obs.type === "pothole" && checkCollision(player, obs)) {
-          lives--;
-          player.x = 100;
-          player.y = ground.y - player.height;
-          if (lives <= 0) gameOver = true;
+          handlePlayerHit();
         }
       });
     }
 
     function draw() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      if (gameOver) {
-        ctx.fillStyle = "black";
-        ctx.font = "48px Arial";
-        ctx.fillText("GAME OVER", canvas.width/2 - 120, canvas.height/2);
-        ctx.font = "24px Arial";
-        ctx.fillText("Press ENTER to Restart", canvas.width/2 - 140, canvas.height/2 + 50);
-        return;
-      }
-
-      // Ground
+      
+      // Draw static background
       ctx.fillStyle = "#228B22";
       ctx.fillRect(ground.x, ground.y, ground.width, ground.height);
-
-      // Background palms
       ctx.drawImage(palmImg, 200, ground.y - 150, 100, 150);
       ctx.drawImage(palmImg, 800, ground.y - 150, 100, 150);
 
-      // Player (cart)
-      ctx.drawImage(cartImg, player.x, player.y, player.width, player.height);
+      // --- Draw based on Game State ---
+      if (gameState === 'playing' || gameState === 'gameOver') {
+        // Player (cart)
+        ctx.drawImage(cartImg, player.x, player.y, player.width, player.height);
 
-      // Donuts
-      donuts.forEach(donut => {
-        ctx.drawImage(donutImg, donut.x, donut.y, donut.size, donut.size);
-      });
+        // Donuts
+        donuts.forEach(donut => {
+          ctx.drawImage(donutImg, donut.x, donut.y, donut.size, donut.size);
+        });
 
-      // Obstacles
-      obstacles.forEach(obs => {
-        if (obs.type === "garita") {
-          ctx.drawImage(garitaImg, obs.x, obs.y, obs.width, obs.height);
-        } else if (obs.type === "pothole") {
-          ctx.fillStyle = "black";
-          ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
-        } else if (obs.type === "elmorro") {
-          ctx.fillStyle = "#A9A9A9";
-          ctx.fillRect(obs.x, obs.y, obs.width, obs.height); // El Morro block
-        }
-      });
+        // Obstacles
+        obstacles.forEach(obs => {
+          if (obs.type === "garita") {
+            ctx.drawImage(garitaImg, obs.x, obs.y, obs.width, obs.height);
+          } else if (obs.type === "pothole") {
+            ctx.fillStyle = "black";
+            ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+          }
+        });
 
-      // Enemies (coquí frogs)
-      enemies.forEach(enemy => {
-        ctx.drawImage(coquiImg, enemy.x, enemy.y, enemy.width, enemy.height);
-      });
+        // Enemies (coquí frogs)
+        enemies.forEach(enemy => {
+          ctx.drawImage(coquiImg, enemy.x, enemy.y, enemy.width, enemy.height);
+        });
 
-      // Lives counter
-      ctx.fillStyle = "black";
-      ctx.font = "20px Arial";
-      ctx.fillText("Lives: " + lives, 20, 30);
+        // Lives counter
+        ctx.fillStyle = "white";
+        ctx.strokeStyle = "black";
+        ctx.font = "24px Arial";
+        ctx.lineWidth = 4;
+        ctx.strokeText("Lives: " + lives, 20, 30);
+        ctx.fillText("Lives: " + lives, 20, 30);
+      }
+      
+      if (gameState === 'gameOver') {
+        ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "red";
+        ctx.font = "48px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2);
+      }
     }
 
+    // --- GAME LOOP ---
     function gameLoop() {
       update();
       draw();
       requestAnimationFrame(gameLoop);
     }
 
-    cartImg.onload = () => {
-      gameLoop();
-    };
+    // --- INITIALIZE ---
+    setupEventListeners();
+    gameLoop(); // Start the loop to handle drawing the start screen
   </script>
 </body>
 </html>

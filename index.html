@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Puerto Rico Cart Game</title>
+  <style>
+    body { margin: 0; overflow: hidden; }
+    canvas { display: block; background: #87CEEB; }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    // Load images
+    const cartImg = new Image();
+    cartImg.src = "spritesheet.png"; // your cart image
+    const donutImg = new Image();
+    donutImg.src = "https://i.ibb.co/nBG2g7y/donut.png"; 
+    const palmImg = new Image();
+    palmImg.src = "https://i.ibb.co/hcfy9Vn/palm.png"; 
+    const garitaImg = new Image();
+    garitaImg.src = "https://i.ibb.co/Z1xKcX9/garita.png"; 
+    const coquiImg = new Image();
+    coquiImg.src = "https://i.ibb.co/M9HkKjF/frog.png"; 
+
+    // Player (cart)
+    const player = {
+      x: 100,
+      y: canvas.height - 150,
+      width: 150,
+      height: 90,
+      velY: 0,
+      onGround: false
+    };
+
+    const gravity = 1;
+    let lives = 3;
+    let gameOver = false;
+
+    // Ground
+    const ground = { x: 0, y: canvas.height - 50, width: canvas.width, height: 50 };
+
+    // Donuts
+    const donuts = [
+      { x: 400, y: canvas.height - 200, size: 40 },
+      { x: 700, y: canvas.height - 300, size: 40 },
+      { x: 1000, y: canvas.height - 150, size: 40 }
+    ];
+
+    // Obstacles
+    const obstacles = [
+      { type: "garita", x: 600, y: ground.y - 100, width: 60, height: 100 },
+      { type: "pothole", x: 900, y: ground.y, width: 80, height: 50 },
+      { type: "elmorro", x: 1200, y: ground.y - 150, width: 200, height: 150 }
+    ];
+
+    // Enemies (coquí frogs)
+    const enemies = [
+      { x: 500, y: ground.y - 40, width: 40, height: 40, dir: 1 }
+    ];
+
+    let keys = {};
+
+    document.addEventListener("keydown", e => {
+      keys[e.code] = true;
+      if (gameOver && e.code === "Enter") restartGame();
+    });
+    document.addEventListener("keyup", e => { keys[e.code] = false; });
+
+    function restartGame() {
+      lives = 3;
+      gameOver = false;
+      player.x = 100;
+      player.y = canvas.height - 150;
+      player.velY = 0;
+    }
+
+    function checkCollision(a, b) {
+      return (
+        a.x < b.x + b.width &&
+        a.x + a.width > b.x &&
+        a.y < b.y + b.height &&
+        a.y + a.height > b.y
+      );
+    }
+
+    function update() {
+      if (gameOver) return;
+
+      // Move left/right
+      if (keys["ArrowLeft"]) player.x -= 5;
+      if (keys["ArrowRight"]) player.x += 5;
+
+      // Jump
+      if (keys["Space"] && player.onGround) {
+        player.velY = -20;
+        player.onGround = false;
+      }
+
+      // Gravity
+      player.velY += gravity;
+      player.y += player.velY;
+
+      // Ground collision
+      if (player.y + player.height >= ground.y) {
+        player.y = ground.y - player.height;
+        player.velY = 0;
+        player.onGround = true;
+      }
+
+      // Enemy movement (frogs hopping)
+      enemies.forEach(enemy => {
+        enemy.x += enemy.dir * 2;
+        if (enemy.x < 400 || enemy.x > 700) enemy.dir *= -1;
+
+        // Check collision with player
+        if (checkCollision(player, enemy)) {
+          lives--;
+          player.x = 100; // reset position
+          player.y = ground.y - player.height;
+          if (lives <= 0) gameOver = true;
+        }
+      });
+
+      // Check pothole collision
+      obstacles.forEach(obs => {
+        if (obs.type === "pothole" && checkCollision(player, obs)) {
+          lives--;
+          player.x = 100;
+          player.y = ground.y - player.height;
+          if (lives <= 0) gameOver = true;
+        }
+      });
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      if (gameOver) {
+        ctx.fillStyle = "black";
+        ctx.font = "48px Arial";
+        ctx.fillText("GAME OVER", canvas.width/2 - 120, canvas.height/2);
+        ctx.font = "24px Arial";
+        ctx.fillText("Press ENTER to Restart", canvas.width/2 - 140, canvas.height/2 + 50);
+        return;
+      }
+
+      // Ground
+      ctx.fillStyle = "#228B22";
+      ctx.fillRect(ground.x, ground.y, ground.width, ground.height);
+
+      // Background palms
+      ctx.drawImage(palmImg, 200, ground.y - 150, 100, 150);
+      ctx.drawImage(palmImg, 800, ground.y - 150, 100, 150);
+
+      // Player (cart)
+      ctx.drawImage(cartImg, player.x, player.y, player.width, player.height);
+
+      // Donuts
+      donuts.forEach(donut => {
+        ctx.drawImage(donutImg, donut.x, donut.y, donut.size, donut.size);
+      });
+
+      // Obstacles
+      obstacles.forEach(obs => {
+        if (obs.type === "garita") {
+          ctx.drawImage(garitaImg, obs.x, obs.y, obs.width, obs.height);
+        } else if (obs.type === "pothole") {
+          ctx.fillStyle = "black";
+          ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+        } else if (obs.type === "elmorro") {
+          ctx.fillStyle = "#A9A9A9";
+          ctx.fillRect(obs.x, obs.y, obs.width, obs.height); // El Morro block
+        }
+      });
+
+      // Enemies (coquí frogs)
+      enemies.forEach(enemy => {
+        ctx.drawImage(coquiImg, enemy.x, enemy.y, enemy.width, enemy.height);
+      });
+
+      // Lives counter
+      ctx.fillStyle = "black";
+      ctx.font = "20px Arial";
+      ctx.fillText("Lives: " + lives, 20, 30);
+    }
+
+    function gameLoop() {
+      update();
+      draw();
+      requestAnimationFrame(gameLoop);
+    }
+
+    cartImg.onload = () => {
+      gameLoop();
+    };
+  </script>
+</body>
+</html>
